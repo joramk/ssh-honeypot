@@ -231,13 +231,12 @@ static void json_log(const char *msg) {
 /* http_log() -- log via HTTP(s) POST JSON API
 */
 static void http_log(const char *msg) {
+		errbuf[0] = 0;
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, msg);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(msg));
-		errbuf[0] = 0;
 		CURLcode res = curl_easy_perform(curl);
-		if (res != CURLE_OK) {
+		if (res != CURLE_OK)
 			log_entry("WARNING: curl failed: %s\n", errbuf);
-		}
 }
 
 
@@ -283,7 +282,6 @@ static void json_log_creds(const char *ip, const char *user, const char *pass) {
 static void json_log_hassh(const char *hassh,
 						   const char *ip,
 						   const char *hassh_type,
-						   const uint16_t sport,
 						   const uint16_t ttl) {
 	char			*message;
 
@@ -291,7 +289,6 @@ static void json_log_hassh(const char *hassh,
 	json_object		*j_time  = json_object_new_int(time(NULL));
 	json_object		*j_hassh = json_object_new_string(hassh);
 	json_object		*j_ip    = json_object_new_string(ip);
-	json_object		*j_sport = json_object_new_int(sport);
 	json_object		*j_ttl   = json_object_new_int(ttl);
 	json_object		*j_event = json_object_new_string(hassh_type);
 	json_object     *j_uuid   = json_object_new_string(uuid);
@@ -300,7 +297,6 @@ static void json_log_hassh(const char *hassh,
 	json_object_object_add(jobj, "time", j_time);
 	json_object_object_add(jobj, "ip", j_ip);
 	json_object_object_add(jobj, "hassh", j_hassh);
-	json_object_object_add(jobj, "sport", j_sport);
 	json_object_object_add(jobj, "ttl", j_ttl);
 	json_object_object_add(jobj, "uuid", j_uuid);
 
@@ -446,12 +442,12 @@ void parse_hassh(u_char *args,
 	uint8_t			compression[2048] = {0};
 
 	struct ip		*ip_header;
-	struct tcphdr	*tcp_header;
+/*	struct tcphdr	*tcp_header; */
 
 
 	/* populate ip and tcphdr structures. set offset to start of data. */
 	ip_header = (struct ip *)(packet);
-	tcp_header = (struct tcphdr *)(packet + sizeof(struct ip));
+/*	tcp_header = (struct tcphdr *)(packet + sizeof(struct ip)); */
 	offset = sizeof(struct ip) + sizeof(struct tcphdr);
 
 	/* Look for SSH2_MSG_KEXINIT packets */
@@ -459,8 +455,15 @@ void parse_hassh(u_char *args,
 		return;
 
 	/* Don't innundate logs with the server's HASSH. */
+/*
 	if ((htons(tcp_header->th_sport) == port) && hassh_server)
 		return;
+*/
+    if (hassh_server) {
+		hassh_server=false;
+		return;
+	} else
+		hassh_server=true;
 
 	/* lol */
 	offset += 25;
@@ -541,19 +544,16 @@ void parse_hassh(u_char *args,
 			 digest[15]);
 
 	/* Log and output */
-	log_entry("%s: %s %s sport: %d ttl: %d",
-			  htons(tcp_header->th_sport) == port ? "HASSHServer" : "HASSH",
+	log_entry("%s: %s %s ttl: %d",
+			  "HASSH",
 			  inet_ntoa(ip_header->ip_src),
 			  hassh_digest,
-			  htons(tcp_header->th_sport),
 			  ip_header->ip_ttl);
 
 	if (json_logging_file || json_logging_server)
 		json_log_hassh(hassh_digest,
 					   inet_ntoa(ip_header->ip_src),
-					   htons(tcp_header->th_sport) == port ?
-					   "hasshserver" : "hassh",
-					   htons(tcp_header->th_sport),
+					   "hassh",
 					   ip_header->ip_ttl);
 
 	return;
