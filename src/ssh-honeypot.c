@@ -895,7 +895,7 @@ int main(int argc, char *argv[]) {
 		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 7);
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-		curl_easy_setopt(curl, CURLOPT_URL, json_server);
+		curl_easy_setopt(curl, CURLOPT_URL, http_server);
 		curl_easy_setopt(curl, CURLOPT_POST, 1L);		
 	}
 
