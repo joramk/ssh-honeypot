@@ -550,7 +550,7 @@ void parse_hassh(u_char *args,
 			  hassh_digest,
 			  ip_header->ip_ttl);
 
-	if (json_logging_file || json_logging_server)
+	if (json_logging_file || json_logging_server || http_logging_server)
 		json_log_hassh(hassh_digest,
 					   inet_ntoa(ip_header->ip_src),
 					   "hassh",
@@ -615,7 +615,7 @@ static int handle_ssh_auth(ssh_session session) {
 	char *hmac_in    = (char *)ssh_get_hmac_in(session);
 	char *hmac_out   = (char *)ssh_get_hmac_out(session);
 
-	if (json_logging_file || json_logging_server)
+	if (json_logging_file || json_logging_server || http_logging_server)
 		json_log_session(ip,
 						 banner_c,
 						 banner_s,
@@ -642,7 +642,7 @@ static int handle_ssh_auth(ssh_session session) {
 		switch (ssh_message_subtype(message)) {
 			// TODO SSH_AUTH_METHOD_PUBLICKEY
 		case SSH_AUTH_METHOD_PASSWORD:
-			if (json_logging_file || json_logging_server)
+			if (json_logging_file || json_logging_server || http_logging_server)
 				json_log_creds(ip,
 							   ssh_message_auth_user(message),
 							   ssh_message_auth_password(message));
