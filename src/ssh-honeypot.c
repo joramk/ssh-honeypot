@@ -26,10 +26,10 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-
+#include <curl/curl.h>
 #include <libssh/libssh.h>
 #include <libssh/server.h>
-
+#include <uuid/uuid.h>
 #include <json-c/json.h>
 
 /* needed for HASSH */
@@ -59,25 +59,38 @@ unsigned short  json_port           = JSON_PORT;
 bool            verbose             = false;
 int             json_sock;
 char            hostname[MAXHOSTNAMELEN];
-
+CURL           *curl                = NULL;
+char            errbuf[CURL_ERROR_SIZE];
 bool			hassh_server		= false;
-
+char           *uuid                = NULL;
+bool            http_logging_server = false;
+bool            http_logging_auth   = false;
+char           *http_server         = NULL;
+char           *http_server_auth    = NULL;
 
 /* Banners */
 static struct banner_info_s {
 	const char	*str, *info;
 } banners[] = {
 	{"",  "No banner"},
-	{"OpenSSH_5.9p1 Debian-5ubuntu1.4", "Ubuntu 12.04"},
-	{"OpenSSH_7.2p2 Ubuntu-4ubuntu2.1", "Ubuntu 16.04"},
-	{"OpenSSH_7.6p1 Ubuntu-4ubuntu0.3", "Ubuntu 18.04"},
-	{"OpenSSH_8.2p1 Ubuntu-4ubuntu0.4", "Ubuntu 20.04"},
-	{"OpenSSH_6.6.1",                   "openSUSE 42.1"},
-	{"OpenSSH_6.7p1 Debian-5+deb8u3",   "Debian 8.6"},
-	{"OpenSSH_7.5",                     "pfSense 2.4.4-RELEASE-p3"},
-	{"dropbear_2014.63",                "dropbear 2014.63"},
-	{"OpenSSH_6.7p1 Raspbian-5+deb8u4", "Rapberry Pi"},
-	{"ROSSSH",                          "MikroTik"},
+	{"OpenSSH_8.4p1 Debian-5",            "Debian 11.x Bullseye"},
+	{"OpenSSH_7.9p1 Debian-10+deb10u2",   "Debian 10.3 Buster"},
+	{"OpenSSH_9.0p1 Ubuntu-1ubuntu7",     "Ubuntu Kinetic Kudu"},
+	{"OpenSSH_8.9p1 Ubuntu-3",            "Ubuntu Jammy Jellyfish"},
+	{"OpenSSH_8.8 FreeBSD-20211221",      "FreeBSD 13.1-RELEASE"},
+	{"OpenSSH_7.9 FreeBSD-20200214",      "FreeBSD 13.0-RELEASE"},
+	{"OpenSSH_8.1p1 Raspbian-1+deb11u1",  "Debian 11 Bullseye based"},
+	{"OpenSSH_7.9p1 Raspbian-10+deb10u1", "Debian 10 Buster based"},
+    {"OpenSSH_5.9p1 Debian-5ubuntu1.4",   "Ubuntu 12.04"},
+    {"OpenSSH_7.2p2 Ubuntu-4ubuntu2.1",   "Ubuntu 16.04"},
+    {"OpenSSH_7.6p1 Ubuntu-4ubuntu0.3",   "Ubuntu 18.04"},
+    {"OpenSSH_8.2p1 Ubuntu-4ubuntu0.4",   "Ubuntu 20.04"},
+    {"OpenSSH_6.6.1",                     "openSUSE 42.1"},
+    {"OpenSSH_6.7p1 Debian-5+deb8u3",     "Debian 8.6"},
+    {"OpenSSH_7.5",                       "pfSense 2.4.4-RELEASE-p3"},
+    {"dropbear_2014.63",                  "dropbear 2014.63"},
+    {"OpenSSH_6.7p1 Raspbian-5+deb8u4",   "Rapberry Pi"},
+    {"ROSSSH",                            "MikroTik"},
 };
 
 const size_t num_banners = sizeof(banners) / sizeof(*banners);
@@ -114,6 +127,8 @@ static void usage(const char *progname) {
 	fprintf(stderr, "\t-J <address>\t-- server to send JSON logs\n");
 	fprintf(stderr, "\t-P <port>\t-- port to send JSON logs\n");
 	fprintf(stderr, "\t-v\t\t-- verbose log output\n");
+	fprintf(stderr, "\t-A <string>\t-- HTTP(s) Authentication password\n");
+	fprintf(stderr, "\t-H <url>\t-- HTTP(s) JSON POST API endpoint\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -213,6 +228,19 @@ static void json_log(const char *msg) {
 }
 
 
+/* http_log() -- log via HTTP(s) POST JSON API
+*/
+static void http_log(const char *msg) {
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, msg);
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(msg));
+		errbuf[0] = 0;
+		CURLcode res = curl_easy_perform(curl);
+		if (res != CURLE_OK) {
+			log_entry("WARNING: curl failed: %s\n", errbuf);
+		}
+}
+
+
 /* json_log_creds() -- log username/password in JSON format
  */
 static void json_log_creds(const char *ip, const char *user, const char *pass) {
@@ -225,6 +253,7 @@ static void json_log_creds(const char *ip, const char *user, const char *pass) {
 	json_object		*j_user   = json_object_new_string(user);
 	json_object		*j_pass   = json_object_new_string(pass);
 	json_object		*j_event  = json_object_new_string("ssh-honeypot-auth");
+	json_object     *j_uuid   = json_object_new_string(uuid);
 
 	json_object_object_add(jobj, "event", j_event);
 	json_object_object_add(jobj, "time", j_time);
@@ -232,6 +261,7 @@ static void json_log_creds(const char *ip, const char *user, const char *pass) {
 	json_object_object_add(jobj, "client", j_client);
 	json_object_object_add(jobj, "user", j_user);
 	json_object_object_add(jobj, "pass", j_pass);
+	json_object_object_add(jobj, "uuid", j_uuid);
 
 	message = (char *)json_object_to_json_string(jobj);
 
@@ -240,6 +270,9 @@ static void json_log_creds(const char *ip, const char *user, const char *pass) {
 
 	if (json_logging_server)
 		sockprintf(json_sock, "%s\r\n", message);
+
+	if (http_logging_server)
+		http_log(message);
 
 	json_object_put(jobj);
 }
@@ -261,7 +294,7 @@ static void json_log_hassh(const char *hassh,
 	json_object		*j_sport = json_object_new_int(sport);
 	json_object		*j_ttl   = json_object_new_int(ttl);
 	json_object		*j_event = json_object_new_string(hassh_type);
-
+	json_object     *j_uuid   = json_object_new_string(uuid);
 
 	json_object_object_add(jobj, "event", j_event);
 	json_object_object_add(jobj, "time", j_time);
@@ -269,6 +302,7 @@ static void json_log_hassh(const char *hassh,
 	json_object_object_add(jobj, "hassh", j_hassh);
 	json_object_object_add(jobj, "sport", j_sport);
 	json_object_object_add(jobj, "ttl", j_ttl);
+	json_object_object_add(jobj, "uuid", j_uuid);
 
 	message = (char *)json_object_to_json_string(jobj);
 
@@ -277,6 +311,9 @@ static void json_log_hassh(const char *hassh,
 
 	if (json_logging_server)
 		sockprintf(json_sock, "%s\r\n", message);
+
+	if (http_logging_server)
+		http_log(message);
 
 	json_object_put(jobj);
 }
@@ -291,12 +328,14 @@ static void json_log_kex_error(const char *ip) {
 	json_object		*j_time   = json_object_new_int(time(NULL));
 	json_object		*j_host   = json_object_new_string(hostname);
 	json_object		*j_client = json_object_new_string(ip);
-	json_object		*j_event  = json_object_new_string("ssh-honetpot-kexerror");
+	json_object		*j_event  = json_object_new_string("ssh-honeypot-kexerror");
+	json_object     *j_uuid   = json_object_new_string(uuid);
 
 	json_object_object_add(jobj, "event", j_event);
 	json_object_object_add(jobj, "time", j_time);
 	json_object_object_add(jobj, "host", j_host);
 	json_object_object_add(jobj, "client", j_client);
+	json_object_object_add(jobj, "uuid", j_uuid);
 
 	message = (char *)json_object_to_json_string(jobj);
 
@@ -305,6 +344,9 @@ static void json_log_kex_error(const char *ip) {
 
 	if (json_logging_server)
 		sockprintf(json_sock, "%s\r\n", message);
+
+	if (verbose && http_logging_server)
+		http_log(message);
 
 	json_object_put(jobj);
 }
@@ -333,6 +375,7 @@ static void json_log_session(const char *client_ip,
 	json_object	*j_cipher_out = json_object_new_string(cipher_out);
 	json_object	*j_hmac_in    = json_object_new_string(hmac_in);
 	json_object	*j_hmac_out   = json_object_new_string(hmac_out);
+	json_object *j_uuid       = json_object_new_string(uuid);
 
 	json_object_object_add(jobj, "event", j_event);
 	json_object_object_add(jobj, "time", j_time);
@@ -345,6 +388,7 @@ static void json_log_session(const char *client_ip,
 	json_object_object_add(jobj, "cipher_out", j_cipher_out);
 	json_object_object_add(jobj, "hmac_in", j_hmac_in);
 	json_object_object_add(jobj, "hmac_out", j_hmac_out);
+	json_object_object_add(jobj, "uuid", j_uuid);
 
 	message = (char *)json_object_to_json_string(jobj);
 
@@ -353,6 +397,9 @@ static void json_log_session(const char *client_ip,
 
 	if (json_logging_server)
 		sockprintf(json_sock, "%s\r\n", message);
+
+	if (http_logging_server)
+		http_log(message);
 
 	json_object_put(jobj);
 }
@@ -528,7 +575,11 @@ static int handle_ssh_auth(ssh_session session) {
 	char			pcap_file[PATH_MAX];
 	pcap_t			*pd;
 	char			errbuf[PCAP_ERRBUF_SIZE];
+	uuid_t			binuuid;
 
+	/* Generate unique session id */
+	uuid_generate_random(binuuid);
+	uuid_unparse_lower(binuuid, uuid);
 
 	snprintf(pcap_file, sizeof(pcap_file), "/tmp/ssh-honeypot-%d.pcap", getpid());
 
@@ -701,9 +752,9 @@ int main(int argc, char *argv[]) {
 	ssh_session		session;
 	ssh_bind		sshbind;
 	long			timeout      = TIMEOUT;
+    uuid = malloc(37);
 
-
-	while ((opt = getopt(argc, argv, "vh?p:dLl:a:b:i:r:f:su:j:J:P:")) != -1) {
+	while ((opt = getopt(argc, argv, "vh?p:dLl:a:b:i:r:f:su:j:J:P:H:A:")) != -1) {
 		switch (opt) {
 		case 'p': /* Listen port */
 			port = atoi(optarg);
@@ -788,6 +839,16 @@ int main(int argc, char *argv[]) {
 			verbose = true;
 			break;
 
+		case 'H': /* HTTP REST API server */
+			http_logging_server = true;
+			http_server = optarg;
+			break;
+
+		case 'A': /* HTTP Basic Authentication password */
+			http_logging_auth = true;
+			http_server_auth = optarg;
+			break;
+
 		default:
 			usage(argv[0]);
 		}
@@ -811,6 +872,30 @@ int main(int argc, char *argv[]) {
 		/* connect() UDP socket to avoid sendto() */
 		if (connect(json_sock, (struct sockaddr *)&s_addr, sizeof(s_addr)) == -1)
 			log_entry_fatal("FATAL: connect(): %s\n", strerror(errno));
+	}
+
+	if (http_logging_server) {
+		curl = curl_easy_init();
+		struct curl_slist* slist = NULL;
+		slist = curl_slist_append(slist, "Content-Type: application/json");
+		char ua_str[sizeof(APPNAME) + sizeof(VERSION) + 1];
+		strcpy(ua_str, APPNAME);
+		strcat(ua_str, "/");
+		strcat(ua_str, VERSION);
+		curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, ua_str);
+		if (http_logging_auth) {
+			curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+			curl_easy_setopt(curl, CURLOPT_USERNAME, APPNAME);
+			curl_easy_setopt(curl, CURLOPT_PASSWORD, http_server_auth);
+		}
+		curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
+		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
+		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 7);
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+		curl_easy_setopt(curl, CURLOPT_URL, json_server);
+		curl_easy_setopt(curl, CURLOPT_POST, 1L);		
 	}
 
 	signal(SIGCHLD, SIG_IGN);
