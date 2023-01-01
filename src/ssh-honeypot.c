@@ -678,6 +678,7 @@ static int handle_ssh_auth(ssh_session session) {
 	} else {
 		pcap_loop(pd, 0, parse_hassh, NULL);
 	}
+	pcap_close(pd);
 
 	/* Remove packet capture file */
 	unlink(pcap_file); // TODO error check
