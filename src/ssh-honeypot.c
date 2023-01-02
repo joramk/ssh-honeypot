@@ -61,7 +61,7 @@ int             json_sock;
 char            hostname[MAXHOSTNAMELEN];
 CURL           *curl                = NULL;
 char            errbuf[CURL_ERROR_SIZE];
-bool			hassh_server		= false;
+bool			hassh_server		= true;
 char           *uuid                = NULL;
 bool            http_logging_server = false;
 bool            http_logging_auth   = false;
