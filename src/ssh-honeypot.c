@@ -956,8 +956,11 @@ int main(int argc, char *argv[]) {
 		if (child < 0)
 			log_entry_fatal("FATAL: fork(): %s", strerror(errno));
 
-		if (child == 0)
+		if (child == 0) {
+			int randomTime = rand() %3 + 1;
+			sleep(randomTime);
 			exit(handle_ssh_auth(session));
+		}
 
 		/* TODO: This may fail if the first connection to ssh-honeypot isn't
 		   initiated by an ssh client. As a result, ssh-honeypot will never
