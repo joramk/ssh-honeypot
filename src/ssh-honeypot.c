@@ -639,6 +639,9 @@ static int handle_ssh_auth(ssh_session session) {
 		if ((message = ssh_message_get(session)) == NULL)
 			break;
 
+		int randomTime = rand() %3 + 1;
+		sleep(randomTime);
+
 		switch (ssh_message_subtype(message)) {
 			// TODO SSH_AUTH_METHOD_PUBLICKEY
 		case SSH_AUTH_METHOD_PASSWORD:
@@ -957,8 +960,6 @@ int main(int argc, char *argv[]) {
 			log_entry_fatal("FATAL: fork(): %s", strerror(errno));
 
 		if (child == 0) {
-			int randomTime = rand() %3 + 1;
-			sleep(randomTime);
 			exit(handle_ssh_auth(session));
 		}
 
