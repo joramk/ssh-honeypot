@@ -963,6 +963,9 @@ int main(int argc, char *argv[]) {
 			exit(handle_ssh_auth(session));
 		}
 
+		int randomTime = rand() %3 + 1;
+		sleep(randomTime);
+
 		/* TODO: This may fail if the first connection to ssh-honeypot isn't
 		   initiated by an ssh client. As a result, ssh-honeypot will never
            emit a hasshserver event.
