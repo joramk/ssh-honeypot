@@ -668,6 +668,7 @@ static int handle_ssh_auth(ssh_session session) {
 	// TODO log end of session? elapsed time, ...
 
 	/* Close pcap file when we're done with it. */
+	ssh_pcap_file_close(pcap);
 	ssh_pcap_file_free(pcap);
 
 	/* Calculate HASSH */
