@@ -231,7 +231,6 @@ static void json_log(const char *msg) {
 /* http_log() -- log via HTTP(s) POST JSON API
 */
 static void http_log(const char *msg) {
-		sleep(1);
 		errbuf[0] = 0;
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, msg);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(msg));
@@ -671,6 +670,9 @@ static int handle_ssh_auth(ssh_session session) {
 	/* Close pcap file when we're done with it. */
 	ssh_pcap_file_close(pcap);
 	ssh_pcap_file_free(pcap);
+
+	int randomTime = rand() %3 + 1;
+	sleep(randomTime);
 
 	/* Calculate HASSH */
 	// TODO this appears to have been failing because the pcap
