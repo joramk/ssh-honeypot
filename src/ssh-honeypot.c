@@ -231,7 +231,7 @@ static void json_log(const char *msg) {
 /* http_log() -- log via HTTP(s) POST JSON API
 */
 static void http_log(const char *msg) {
-		usleep(100000);
+		sleep(1);
 		errbuf[0] = 0;
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, msg);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(msg));
