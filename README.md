@@ -29,7 +29,7 @@ Make sure headers/development packages are installed for:
 - libuuid
 
 ```
-apt install libssh-dev libjson-c-dev libpcap-dev libssl-dev
+apt install libssh-dev libjson-c-dev libpcap-dev libssl-dev libcurl-dev libuuid-dev
 ```
 
 Build and Run
@@ -137,6 +137,21 @@ time, logs are transmitted using UDP and not encrypted.
 This feature can be useful when running multiple ssh-honeypot
 instances. Listeners can be created for Splunk and ElasticSearch to
 ingest these logs and make them searchable.
+
+
+## HTTP Logging
+
+The `-H` CLI flag specifies the path to log results in JSON
+format and send it via HTTP(s) to a logging server.
+This feature can make log analytics much easier because many
+languages have robust JSON support.
+
+HTTP logs can be sent to a remote host. The `-H` and `-A` CLI flags
+set the URI and basic authentication password to send logs in JSON to,
+respectively. At this time, the username is hardcoded `ssh-honeypot`.
+
+This feature can be useful when running multiple ssh-honeypot
+instances. 
 
 
 ## Systemd Integration
