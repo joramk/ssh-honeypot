@@ -25,6 +25,8 @@ Make sure headers/development packages are installed for:
 - openssl
 - libjson-c
 - libpcap
+- libcurl
+- libuuid
 
 ```
 apt install libssh-dev libjson-c-dev libpcap-dev libssl-dev
